@@ -16,6 +16,10 @@ https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/dida365.png
 https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/mt-manager.png
 https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/github.png
 https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/legado.png
+https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/deepwiki.png
+https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/huggingface.png
+https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/exa.png
+https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/cloudflare.png
 ```
 
 raw 走不通时换 jsDelivr（同一份文件，CDN 加速）：
@@ -26,6 +30,10 @@ https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/dida365.png
 https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/mt-manager.png
 https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/github.png
 https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/legado.png
+https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/deepwiki.png
+https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/huggingface.png
+https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/exa.png
+https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/cloudflare.png
 ```
 
 ## 图标
@@ -35,6 +43,10 @@ https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/legado.png
 | `icons/amap.png` | 高德地图 | 512×512 | App Store 接口 `itunes.apple.com/lookup?bundleId=com.autonavi.amap` 的 `artworkUrl512`，把结尾 `512x512bb.jpg` 改成 `.png` 取无损版 |
 | `icons/dida365.png` | 滴答清单 | 180×180 | `https://cncdn.dida365.com/web/static/img/apple-touch-icon.png` |
 | `icons/mt-manager.png` | MT管理器 | 600×600 | `https://mt.cc/logo.png` |
+| `icons/deepwiki.png` | DeepWiki | 256×256 | `deepwiki.com` 的 favicon（站点有 Vercel 挑战墙，直连 429，取自 Google favicon 服务） |
+| `icons/huggingface.png` | Hugging Face | 1024×1024 | 官方品牌资源 `huggingface.co/datasets/huggingface/brand-assets` 的 `hf-logo.png` |
+| `icons/exa.png` | Exa | 1024×1024 | `https://exa.imgix.net/logo_cream.png?w=1024`（imgix 从官方源图渲染） |
+| `icons/cloudflare.png` | Cloudflare | 400×400 | `https://github.com/cloudflare.png?size=512`（官方 GitHub 头像，橙云 mark） |
 | `icons/legado.png` | Legado（阅读） | 192×192 | `LegadoTeam/legado` 的 `app/src/main/res/mipmap-xxxhdpi/ic_launcher.png`（Android 最高密度；原作者仓库 gedoor/legado 已清空，只剩公告） |
 | `icons/github.png` | GitHub | 512×512 | `https://github.com/fluidicon.png`（站点 `rel="fluid-icon"`，深色圆盘 + 白猫，圆外透明） |
 
