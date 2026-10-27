@@ -24,6 +24,12 @@ https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/context7.pn
 https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/firecrawl.png
 https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/tavily.png
 https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/stripe.png
+https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/feishu.png
+https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/canva.png
+https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/dropbox.png
+https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/discord.png
+https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/google-maps.png
+https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/google-developer-knowledge.png
 ```
 
 raw 走不通时换 jsDelivr（同一份文件，CDN 加速）：
@@ -42,6 +48,12 @@ https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/context7.png
 https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/firecrawl.png
 https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/tavily.png
 https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/stripe.png
+https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/feishu.png
+https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/canva.png
+https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/dropbox.png
+https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/discord.png
+https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/google-maps.png
+https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/google-developer-knowledge.png
 ```
 
 ## 图标
@@ -59,6 +71,12 @@ https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/stripe.png
 | `icons/firecrawl.png` | Firecrawl | 180×180 | `https://www.firecrawl.dev/apple-touch-icon.png`（站点 `favicon.png` 只有 48×48） |
 | `icons/tavily.png` | Tavily | 512×512 | PWA manifest `/manifest.webmanifest` 里的 `app-icons/icon-512.png` |
 | `icons/stripe.png` | Stripe | 512×512 | `images.stripeassets.com/.../favicon.png?w=512&h=512`（站点 apple-touch-icon 同源，尺寸可调） |
+| `icons/feishu.png` | 飞书 | 512×512 | App Store 官方图标（id `1401729613`，`artworkUrl512` 换 `.png`）；官网 `apple-touch-icon.png` 404、`favicon.ico` 仅 48×48 |
+| `icons/canva.png` | Canva | 512×512 | App Store 官方图标（id `897446215`）；官网 `apple-touch-icon.png` 404 且首页 403 反爬 |
+| `icons/dropbox.png` | Dropbox | 512×512 | App Store 官方图标（id `327630330`）；官网 `apple-touch-icon.png` 404 |
+| `icons/discord.png` | Discord | 256×256 | 官网 `apple-touch-icon` 指向的 ico（`cdn.prod.website-files.com`），转 PNG |
+| `icons/google-maps.png` | Google Maps | 512×512 | PWA manifest 的 `logo_maps_2025_color_1x_web_512dp.png`；manifest 自带的 round 版会带白圈，改用方形版 |
+| `icons/google-developer-knowledge.png` | Google Developer Knowledge | 180×180 | `developers.google.com` 的 `touchicon-180-new.png` |
 | `icons/legado.png` | Legado（阅读） | 192×192 | `LegadoTeam/legado` 的 `app/src/main/res/mipmap-xxxhdpi/ic_launcher.png`（Android 最高密度；原作者仓库 gedoor/legado 已清空，只剩公告） |
 | `icons/github.png` | GitHub | 512×512 | `https://github.com/fluidicon.png`（站点 `rel="fluid-icon"`，深色圆盘 + 白猫，圆外透明） |
 
