@@ -137,6 +137,10 @@ python3 scripts/fetch_icon.py gitbook https://www.gitbook.com
 python3 scripts/fetch_icon.py strava --appstore 426424760
 python3 scripts/fetch_icon.py --batch scripts/batch.tsv   # 每行 name<TAB>url 或 name<TAB>appstore:ID
 python3 scripts/fetch_icon.py slack https://slack.com --force   # 覆盖已有图标
+python3 scripts/fetch_icon.py --selftest       # 不联网自检
+python3 scripts/fetch_icon.py --version
 ```
+
+stdout 只输出产物（`icons/<name>.png<TAB>尺寸<TAB>字节数`），扫描过程与被跳过的候选走 stderr。
 
 官网没有可用大图时再走 App Store 的 `artworkUrl512`：先查 id（`https://itunes.apple.com/search?term=<名称>&country=cn&entity=software`），再 `--appstore <id>`。
