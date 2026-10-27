@@ -24,6 +24,8 @@ https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/context7.pn
 https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/firecrawl.png
 https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/tavily.png
 https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/stripe.png
+https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/gitbook.png
+https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/strava.png
 https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/feishu.png
 https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/canva.png
 https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/dropbox.png
@@ -48,6 +50,8 @@ https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/context7.png
 https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/firecrawl.png
 https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/tavily.png
 https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/stripe.png
+https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/gitbook.png
+https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/strava.png
 https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/feishu.png
 https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/canva.png
 https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/dropbox.png
@@ -123,3 +127,16 @@ printf '%s' 'https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icon
 ```
 
 输出（64 位十六进制）与本机那个文件名一致的就是它。上例的 `acbf86f0…` 只是示例，不是本仓库任何一条地址的哈希。
+
+## 脚本
+
+抓取用 `scripts/fetch_icon.py`（需要 Pillow）。默认按「页面 `<link rel=icon>` → Web App Manifest → 常见路径」顺序找，自动跳过小于 180×180 或大于 2MB 的图，取最大的一张存为 PNG。
+
+```bash
+python3 scripts/fetch_icon.py gitbook https://www.gitbook.com
+python3 scripts/fetch_icon.py strava --appstore 426424760
+python3 scripts/fetch_icon.py --batch scripts/batch.tsv   # 每行 name<TAB>url 或 name<TAB>appstore:ID
+python3 scripts/fetch_icon.py slack https://slack.com --force   # 覆盖已有图标
+```
+
+官网没有可用大图时再走 App Store 的 `artworkUrl512`：先查 id（`https://itunes.apple.com/search?term=<名称>&country=cn&entity=software`），再 `--appstore <id>`。
