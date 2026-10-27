@@ -14,6 +14,7 @@ MCP 服务器 → 编辑 → 图标 → 链接，填下表的地址。
 https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/amap.png
 https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/dida365.png
 https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/mt-manager.png
+https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/github.png
 ```
 
 raw 走不通时换 jsDelivr（同一份文件，CDN 加速）：
@@ -22,6 +23,7 @@ raw 走不通时换 jsDelivr（同一份文件，CDN 加速）：
 https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/amap.png
 https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/dida365.png
 https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/mt-manager.png
+https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/github.png
 ```
 
 ## 图标
@@ -31,6 +33,7 @@ https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/mt-manager.png
 | `icons/amap.png` | 高德地图 | 512×512 | App Store 接口 `itunes.apple.com/lookup?bundleId=com.autonavi.amap` 的 `artworkUrl512`，把结尾 `512x512bb.jpg` 改成 `.png` 取无损版 |
 | `icons/dida365.png` | 滴答清单 | 180×180 | `https://cncdn.dida365.com/web/static/img/apple-touch-icon.png` |
 | `icons/mt-manager.png` | MT管理器 | 600×600 | `https://mt.cc/logo.png` |
+| `icons/github.png` | GitHub | 512×512 | `https://github.com/fluidicon.png`（站点 `rel="fluid-icon"`，深色圆盘 + 白猫，圆外透明） |
 
 ## 收录标准
 
