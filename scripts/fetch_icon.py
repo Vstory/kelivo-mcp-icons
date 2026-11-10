@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SCRIPT_VERSION=1.1.0    # 脚本版本(无模板上游, 独立维护)
+# SCRIPT_VERSION=1.1.1    # 脚本版本(无模板上游, 独立维护)
 # 版本判级: 新增能力/参数 -> minor; 修缺陷/文案 -> patch; 改既有 CLI 或输出契约 -> major
 """抓取官方品牌图标到 icons/<name>.png。
 
@@ -33,7 +33,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from PIL import Image
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -250,8 +250,11 @@ def ink_mask(im, work_h=512):
     return mask, (w / nw, h / work_h)
 
 
-def component_boxes(mask):
-    """不透明像素的连通块 bbox 列表(行行程 + 并查集, 纯 PIL 无额外依赖)。"""
+def components(mask):
+    """不透明像素的连通块, 返回 [(bbox, strokes)], strokes=[(y, x0, x1)] 右闭。
+
+    行行程 + 并查集, 纯 PIL 无额外依赖; strokes 用于把某一块单独抠出来。
+    """
     nw, nh = mask.size
     data = mask.tobytes()
     parent = []
@@ -305,11 +308,13 @@ def component_boxes(mask):
         root = find(rid)
         old = boxes.get(root)
         if old:
-            boxes[root] = (min(old[0], x0), min(old[1], y),
-                           max(old[2], x1), max(old[3], y))
+            boxes[root] = ((min(old[0][0], x0), min(old[0][1], y),
+                            max(old[0][2], x1), max(old[0][3], y)),
+                           old[1] + [(y, x0, x1)])
         else:
-            boxes[root] = (x0, y, x1, y)
-    return [(b[0], b[1], b[2] + 1, b[3] + 1) for b in boxes.values()]
+            boxes[root] = ((x0, y, x1, y), [(y, x0, x1)])
+    return [((b[0], b[1], b[2] + 1, b[3] + 1), strokes)
+            for b, strokes in boxes.values()]
 
 
 def ink_ratio(box):
@@ -319,37 +324,64 @@ def ink_ratio(box):
     return max(w, h) / min(w, h)
 
 
-def mark_bbox(im, work_h=512):
-    """在横版 logo 里定位方形 mark, 返回原图像素坐标 (x0, y0, x1, y1); 定位不到返回 None。
+def mark_parts(im, work_h=512):
+    """定位横版 logo 里的方形 mark。
 
-    取"高度接近整图 ink 高、面积最大"的连通块: 横版 logo 里的 mark 总是最左最大那块,
-    文字与 ® 这类附属符号要么更矮要么更小。块本身过宽(与文字粘连)时退化成左侧方窗。
+    返回 (box_px, strokes, work_size): box_px 是原图像素坐标的 mark bbox,
+    strokes 是 mark 那块连通块的行程(用于抠掉文字/® 等非 mark 像素),
+    判定不出 mark 时返回 (None, None, None)。
     """
     mask, (sx, sy) = ink_mask(im, work_h)
     whole = mask.getbbox()
     if not whole:
-        return None
+        return None, None, None
     ink_h = whole[3] - whole[1]
-    boxes = component_boxes(mask)
-    if not boxes:
-        return None
-    tall = [b for b in boxes if b[3] - b[1] >= TALL_BLOCK_RATIO * ink_h]
-    pool = tall or boxes
-    best = max(pool, key=lambda b: ((b[2] - b[0]) * (b[3] - b[1]), -(b[0])))
-    if ink_ratio(best) > MARK_RATIO:
+    parts = components(mask)
+    if not parts:
+        return None, None, None
+    tall = [p for p in parts if p[0][3] - p[0][1] >= TALL_BLOCK_RATIO * ink_h]
+    pool = tall or parts
+    box, strokes = max(pool, key=lambda p: ((p[0][2] - p[0][0]) * (p[0][3] - p[0][1]),
+                                            -(p[0][0])))
+    if ink_ratio(box) > MARK_RATIO:
+        # 最大块与文字粘连成一条, 退化成左侧方窗; 此时没有可分离的 strokes
         window = (whole[0], whole[1], whole[0] + ink_h, whole[1] + ink_h)
-        log(f"  最大块宽高比 {ink_ratio(best):.2f} 不像方形, 改用左侧方窗 {window}")
-        best = window
-    return tuple(round(v * s) for v, s in zip(best, (sx, sy, sx, sy)))
+        log(f"  最大块宽高比 {ink_ratio(box):.2f} 不像方形, 改用左侧方窗 {window}")
+        return (tuple(round(v * s) for v, s in zip(window, (sx, sy, sx, sy))),
+                None, None)
+    return (tuple(round(v * s) for v, s in zip(box, (sx, sy, sx, sy))),
+            strokes, mask.size)
 
 
-def square_box(box, pad=0.03):
-    """把 bbox 扩成带留白的正方形裁框(坐标未 clamp)。"""
+def mark_bbox(im, work_h=512):
+    return mark_parts(im, work_h)[0]
+
+
+def clear_others(im, strokes, work_size):
+    """把 strokes 之外的不透明像素抹成透明, 只留 mark 本体。"""
+    keep = Image.new("L", work_size, 0)
+    draw = ImageDraw.Draw(keep)
+    for y, x0, x1 in strokes:
+        draw.rectangle((x0, y, x1, y), fill=255)
+    keep = keep.resize(im.size, Image.NEAREST).filter(ImageFilter.MaxFilter(3))
+    out = im.copy()
+    out.putalpha(ImageChops.multiply(im.getchannel("A"), keep))
+    return out
+
+
+def square_box(box, pad=0.03, limit=None):
+    """把 bbox 扩成带留白的正方形裁框; 给了 limit(画布尺寸)时缩到画布内并保持居中。"""
     x0, y0, x1, y1 = box
     side = max(x1 - x0, y1 - y0) * (1 + 2 * pad)
     cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
-    return (round(cx - side / 2), round(cy - side / 2),
-            round(cx + side / 2), round(cy + side / 2))
+    if limit:
+        w, h = limit
+        side = min(side, w, h)
+        left = min(max(cx - side / 2, 0), w - side)
+        top = min(max(cy - side / 2, 0), h - side)
+    else:
+        left, top = cx - side / 2, cy - side / 2
+    return (round(left), round(top), round(left + side), round(top + side))
 
 
 def parse_box(text):
@@ -363,15 +395,16 @@ def parse_box(text):
     return vals
 
 
-def resolve_box(im, box_arg):
+def resolve_mark(im, box_arg):
+    """(box, strokes, work_size); 手给 --mark-box 时按所见即所得处理, 不擦除任何像素。"""
     if box_arg is None:
-        return mark_bbox(im)
+        return mark_parts(im)
     vals = box_arg
     if all(0 <= v <= 1 for v in vals):
         w, h = im.size
-        return (round(vals[0] * w), round(vals[1] * h),
-                round(vals[2] * w), round(vals[3] * h))
-    return tuple(round(v) for v in vals)
+        return ((round(vals[0] * w), round(vals[1] * h),
+                 round(vals[2] * w), round(vals[3] * h)), None, None)
+    return (tuple(round(v) for v in vals), None, None)
 
 
 def save_png(im, out_path):
@@ -432,21 +465,21 @@ def fetch_svg_mark(root, name, src, size=1024, pad=0.03, force=False, box_arg=No
         log(f"FAIL {name}: {exc}")
         return False
 
-    box = resolve_box(full, box_arg)
+    box, strokes, work_size = resolve_mark(full, box_arg)
     if not box:
         log(f"FAIL {name}: 定位不到方形 mark (整图 ink bbox={full.getchannel('A').getbbox()})")
         log("   用 --mark-box x0,y0,x1,y1 手给裁框(像素坐标, 或四个 ≤1 的比例)")
         return False
     log(f"== {name}: mark bbox={tuple(round(v) for v in box)} 于 {full.size[0]}x{full.size[1]} 渲染图")
+    if strokes is not None:
+        full = clear_others(full, strokes, work_size)
+        log("   已抹掉 mark 之外的不透明像素(文字 / ® 等)")
 
-    crop = square_box(box, pad)
-    canvas = (0, 0, full.size[0], full.size[1])
-    clamped = (max(crop[0], canvas[0]), max(crop[1], canvas[1]),
-               min(crop[2], canvas[2]), min(crop[3], canvas[3]))
-    if clamped[2] - clamped[0] < MIN_SIDE or clamped[3] - clamped[1] < MIN_SIDE:
-        log(f"FAIL {name}: 裁框贴边后只剩 {clamped[2]-clamped[0]}x{clamped[3]-clamped[1]}")
+    crop = square_box(box, pad, limit=full.size)
+    if min(crop[2] - crop[0], crop[3] - crop[1]) < MIN_SIDE:
+        log(f"FAIL {name}: 裁框只有 {crop[2]-crop[0]}x{crop[3]-crop[1]}")
         return False
-    im = full.crop(clamped)
+    im = full.crop(crop)
 
     side = min(im.size)
     if side > size:
@@ -505,11 +538,16 @@ def selftest():
     two = Image.new("L", (60, 20), 0)
     two.paste(255, (0, 0, 10, 20))
     two.paste(255, (40, 0, 50, 20))
-    check("component_boxes 分出两个不相连的块", len(component_boxes(two)) == 2)
+    check("components 分出两个不相连的块", len(components(two)) == 2)
     check("ink_ratio 对正方形为 1", ink_ratio((0, 0, 10, 10)) == 1)
     sq = square_box((0, 0, 100, 100), 0.03)
     check("square_box 留白后仍是正方形",
           (sq[2] - sq[0]) == (sq[3] - sq[1]) and sq[2] - sq[0] > 100)
+    tight = square_box((48, 48, 2000, 2000), 0.03, limit=(2048, 2048))
+    check("square_box 遇画布不足时仍正方形且在画布内",
+          (tight[2] - tight[0]) == (tight[3] - tight[1])
+          and tight[0] >= 0 and tight[1] >= 0
+          and tight[2] <= 2048 and tight[3] <= 2048)
     check("parse_box 收四个数",
           parse_box("1 2 3 4") == [1.0, 2.0, 3.0, 4.0])
     check("UA 被拦时有第二个 UA 可换", UA != ALT_UA and 429 in UA_RETRY_STATUS)
@@ -531,6 +569,11 @@ def selftest():
     reg_box = mark_bbox(with_reg)
     check("分离的矮附属符号被排除",
           reg_box is not None and reg_box[2] <= 105)
+
+    reg_box2, reg_strokes, reg_work = mark_parts(with_reg)
+    cleaned = clear_others(with_reg, reg_strokes, reg_work)
+    check("clear_others 把非 mark 像素抹成透明",
+          cleaned.getpixel((118, 83))[3] == 0 and cleaned.getpixel((50, 50))[3] == 255)
 
     # 附属符号与主干像素相接时无法分离, 至少要退化成不歪的裁框(留给 --mark-box 兜底)
     welded = Image.new("RGBA", (320, 100), (0, 0, 0, 0))
@@ -592,7 +635,7 @@ def main():
     args = ap.parse_args()
 
     if args.version:
-        print("fetch_icon.py 1.1.0")
+        print("fetch_icon.py 1.1.1")
         return 0
     if args.selftest:
         return selftest()
