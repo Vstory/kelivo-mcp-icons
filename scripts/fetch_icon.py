@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
-# SCRIPT_VERSION=1.0.0    # 脚本版本(无模板上游, 独立维护; 内容变更 +1)
+# SCRIPT_VERSION=1.1.0    # 脚本版本(无模板上游, 独立维护)
+# 版本判级: 新增能力/参数 -> minor; 修缺陷/文案 -> patch; 改既有 CLI 或输出契约 -> major
 """抓取官方品牌图标到 icons/<name>.png。
 
 用法:
   fetch_icon.py gitbook https://www.gitbook.com
   fetch_icon.py strava --appstore 426424760
-  fetch_icon.py --batch list.tsv          # 每行 name<TAB>url 或 name<TAB>appstore:ID
+  fetch_icon.py wkinfo --svg-mark https://example.com/logo.svg   # 横版 logo 取方形 mark
+  fetch_icon.py --batch list.tsv          # 每行 name<TAB>url / name<TAB>appstore:ID / name<TAB>svg:url
   fetch_icon.py --selftest                # 不联网自检
   fetch_icon.py --version
 
 候选顺序: 页面 <link rel=icon> → Web App Manifest 的 icons → 常见路径 →
 App Store artwork(给了 --appstore 才走)。每张图都实下实测, 小于 180×180 或
 大于 2MB 丢弃, 取尺寸最大者存 PNG。
+
+--svg-mark: 站点只有横版带字 logo(SVG)时, 矢量渲染到 2048 高再自动裁出方形 mark,
+缩到 --size(默认 1024)。全程无插值放大; 判定不出 mark 时用 --mark-box 手给裁框。
 
 输出契约: stdout 只放产物(图标路径/尺寸), 过程与被跳过的候选走 stderr。
 默认不覆盖已有图标, 覆盖须显式 --force。
@@ -21,7 +26,10 @@ import io
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -31,8 +39,15 @@ UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 )
+# 部分站点(如 upload.wikimedia.org)反而对浏览器式 UA 返 429, 对自述 UA 放行
+ALT_UA = "KelivoIconBot/1.1 (+https://github.com/Vstory/kelivo-mcp-icons)"
+UA_RETRY_STATUS = (403, 429)
 MIN_SIDE = 180
 MAX_BYTES = 2 * 1024 * 1024
+SVG_RENDER_H = 2048          # 矢量渲染基准高度; 后续只缩小不放大
+ALPHA_INK = 8                # alpha 大于此值算"有内容"
+MARK_RATIO = 1.33            # 段宽高比在此内视为方形 mark
+TALL_BLOCK_RATIO = 0.7       # 连通块高度达到整图 ink 高度的此比例才算 mark 主体(文字更矮)
 COMMON = ("/apple-touch-icon.png", "/apple-touch-icon-precomposed.png", "/favicon.ico")
 LINK_RE = re.compile(r"<link\b[^>]*>", re.I)
 HREF_RE = re.compile(r"""\bhref\s*=\s*["']([^"']*)["']""", re.I)
@@ -45,9 +60,19 @@ def log(msg):
 
 
 def get(url, timeout=25):
-    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "*/*"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return resp.read(), resp.geturl()
+    '''取字节, UA 被拦(403/429)时换成自述 UA 重试一次。'''
+    last = None
+    for ua in (UA, ALT_UA):
+        req = urllib.request.Request(url, headers={"User-Agent": ua, "Accept": "*/*"})
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return resp.read(), resp.geturl()
+        except urllib.error.HTTPError as exc:
+            last = exc
+            if exc.code not in UA_RETRY_STATUS:
+                raise
+            log(f"  {exc.code} with browser UA, retry as bot: {url[:70]}")
+    raise last
 
 
 def decode_maybe(data):
@@ -193,6 +218,174 @@ def collect(site, appstore_id, country):
     return candidates
 
 
+def render_svg(data, height=SVG_RENDER_H):
+    """矢量渲染到指定高度。优先 rsvg-convert, 回退 cairosvg, 两者都缺即报错。"""
+    exe = shutil.which("rsvg-convert")
+    if exe:
+        proc = subprocess.run([exe, "-h", str(height), "-f", "png"], input=data,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if proc.returncode != 0 or not proc.stdout:
+            raise RuntimeError("rsvg-convert 失败: " + decode_maybe(proc.stderr)[:200])
+        im = Image.open(io.BytesIO(proc.stdout))
+        im.load()
+        return im.convert("RGBA")
+    try:
+        import cairosvg
+    except ImportError:
+        raise RuntimeError("渲染 SVG 需要 rsvg-convert 或 cairosvg, 两者都没有")
+    png = cairosvg.svg2png(bytestring=data, output_height=height)
+    im = Image.open(io.BytesIO(png))
+    im.load()
+    return im.convert("RGBA")
+
+
+def ink_mask(im, work_h=512):
+    """二值 alpha 图 + 工作图→原图的坐标缩放比。降采样后再二值, 避免细笔画被平均掉。"""
+    w, h = im.size
+    mask = im.getchannel("A").point(lambda a: 255 if a > ALPHA_INK else 0)
+    if h <= work_h:
+        return mask, (1.0, 1.0)
+    nw = max(1, round(w * work_h / h))
+    mask = mask.resize((nw, work_h), Image.BOX).point(lambda v: 255 if v > ALPHA_INK else 0)
+    return mask, (w / nw, h / work_h)
+
+
+def component_boxes(mask):
+    """不透明像素的连通块 bbox 列表(行行程 + 并查集, 纯 PIL 无额外依赖)。"""
+    nw, nh = mask.size
+    data = mask.tobytes()
+    parent = []
+    runs = []
+    prev = []
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    for y in range(nh):
+        row = data[y * nw:(y + 1) * nw]
+        cur = []
+        x = 0
+        while x < nw:
+            if row[x]:
+                start = x
+                while x < nw and row[x]:
+                    x += 1
+                rid = len(runs)
+                parent.append(rid)
+                runs.append((y, start, x - 1))
+                cur.append(rid)
+            else:
+                x += 1
+        i = j = 0
+        while i < len(prev) and j < len(cur):
+            py, px0, px1 = runs[prev[i]]
+            cy, cx0, cx1 = runs[cur[j]]
+            if px1 < cx0:
+                i += 1
+            elif cx1 < px0:
+                j += 1
+            else:
+                union(prev[i], cur[j])
+                if px1 < cx1:
+                    i += 1
+                else:
+                    j += 1
+        prev = cur
+
+    boxes = {}
+    for rid, (y, x0, x1) in enumerate(runs):
+        root = find(rid)
+        old = boxes.get(root)
+        if old:
+            boxes[root] = (min(old[0], x0), min(old[1], y),
+                           max(old[2], x1), max(old[3], y))
+        else:
+            boxes[root] = (x0, y, x1, y)
+    return [(b[0], b[1], b[2] + 1, b[3] + 1) for b in boxes.values()]
+
+
+def ink_ratio(box):
+    w, h = box[2] - box[0], box[3] - box[1]
+    if w <= 0 or h <= 0:
+        return 1e9
+    return max(w, h) / min(w, h)
+
+
+def mark_bbox(im, work_h=512):
+    """在横版 logo 里定位方形 mark, 返回原图像素坐标 (x0, y0, x1, y1); 定位不到返回 None。
+
+    取"高度接近整图 ink 高、面积最大"的连通块: 横版 logo 里的 mark 总是最左最大那块,
+    文字与 ® 这类附属符号要么更矮要么更小。块本身过宽(与文字粘连)时退化成左侧方窗。
+    """
+    mask, (sx, sy) = ink_mask(im, work_h)
+    whole = mask.getbbox()
+    if not whole:
+        return None
+    ink_h = whole[3] - whole[1]
+    boxes = component_boxes(mask)
+    if not boxes:
+        return None
+    tall = [b for b in boxes if b[3] - b[1] >= TALL_BLOCK_RATIO * ink_h]
+    pool = tall or boxes
+    best = max(pool, key=lambda b: ((b[2] - b[0]) * (b[3] - b[1]), -(b[0])))
+    if ink_ratio(best) > MARK_RATIO:
+        window = (whole[0], whole[1], whole[0] + ink_h, whole[1] + ink_h)
+        log(f"  最大块宽高比 {ink_ratio(best):.2f} 不像方形, 改用左侧方窗 {window}")
+        best = window
+    return tuple(round(v * s) for v, s in zip(best, (sx, sy, sx, sy)))
+
+
+def square_box(box, pad=0.03):
+    """把 bbox 扩成带留白的正方形裁框(坐标未 clamp)。"""
+    x0, y0, x1, y1 = box
+    side = max(x1 - x0, y1 - y0) * (1 + 2 * pad)
+    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    return (round(cx - side / 2), round(cy - side / 2),
+            round(cx + side / 2), round(cy + side / 2))
+
+
+def parse_box(text):
+    """--mark-box: 渲染图像素坐标 x0,y0,x1,y1; 四个值都 ≤1 时按画布比例解释。"""
+    try:
+        vals = [float(v) for v in re.split(r"[,\s]+", text.strip()) if v]
+    except ValueError:
+        raise ValueError("--mark-box 需要四个数 x0,y0,x1,y1")
+    if len(vals) != 4:
+        raise ValueError("--mark-box 需要四个数 x0,y0,x1,y1")
+    return vals
+
+
+def resolve_box(im, box_arg):
+    if box_arg is None:
+        return mark_bbox(im)
+    vals = box_arg
+    if all(0 <= v <= 1 for v in vals):
+        w, h = im.size
+        return (round(vals[0] * w), round(vals[1] * h),
+                round(vals[2] * w), round(vals[3] * h))
+    return tuple(round(v) for v in vals)
+
+
+def save_png(im, out_path):
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    if im.mode not in ("RGB", "RGBA"):
+        im = im.convert("RGBA")
+    im.save(out_path, "PNG")
+
+
+def report(name, im, out_path, source, final):
+    log(f"   {source}: {final}")
+    print(f"icons/{name}.png\t{im.size[0]}x{im.size[1]}\t{os.path.getsize(out_path)}B")
+
+
 def fetch(root, name, site=None, appstore_id=None, country="cn", force=False):
     out_path = os.path.join(root, "icons", f"{name}.png")
     if os.path.exists(out_path) and not force:
@@ -211,12 +404,61 @@ def fetch(root, name, site=None, appstore_id=None, country="cn", force=False):
         return False
 
     _, im, source, final = best
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    if im.mode not in ("RGB", "RGBA"):
-        im = im.convert("RGBA")
-    im.save(out_path, "PNG")
-    log(f"   {source}: {final}")
-    print(f"icons/{name}.png\t{im.size[0]}x{im.size[1]}\t{os.path.getsize(out_path)}B")
+    save_png(im, out_path)
+    report(name, im, out_path, source, final)
+    return True
+
+
+def fetch_svg_mark(root, name, src, size=1024, pad=0.03, force=False, box_arg=None):
+    out_path = os.path.join(root, "icons", f"{name}.png")
+    if os.path.exists(out_path) and not force:
+        log(f"exists: icons/{name}.png (use --force to overwrite)")
+        return False
+
+    try:
+        if src.startswith("http"):
+            data, final = get(src)
+        else:
+            with open(src, "rb") as fh:
+                data = fh.read()
+            final = src
+    except Exception as exc:
+        log(f"FAIL {name}: 读不到 SVG 源 ({type(exc).__name__})")
+        return False
+
+    try:
+        full = render_svg(data)
+    except Exception as exc:
+        log(f"FAIL {name}: {exc}")
+        return False
+
+    box = resolve_box(full, box_arg)
+    if not box:
+        log(f"FAIL {name}: 定位不到方形 mark (整图 ink bbox={full.getchannel('A').getbbox()})")
+        log("   用 --mark-box x0,y0,x1,y1 手给裁框(像素坐标, 或四个 ≤1 的比例)")
+        return False
+    log(f"== {name}: mark bbox={tuple(round(v) for v in box)} 于 {full.size[0]}x{full.size[1]} 渲染图")
+
+    crop = square_box(box, pad)
+    canvas = (0, 0, full.size[0], full.size[1])
+    clamped = (max(crop[0], canvas[0]), max(crop[1], canvas[1]),
+               min(crop[2], canvas[2]), min(crop[3], canvas[3]))
+    if clamped[2] - clamped[0] < MIN_SIDE or clamped[3] - clamped[1] < MIN_SIDE:
+        log(f"FAIL {name}: 裁框贴边后只剩 {clamped[2]-clamped[0]}x{clamped[3]-clamped[1]}")
+        return False
+    im = full.crop(clamped)
+
+    side = min(im.size)
+    if side > size:
+        im = im.resize((size, size), Image.LANCZOS)
+    else:
+        log(f"   裁出 {side}px 不超过目标 {size}px, 保持原分辨率不放大")
+    if min(im.size) < MIN_SIDE:
+        log(f"FAIL {name}: {im.size[0]}x{im.size[1]} < {MIN_SIDE}, 换更大的渲染高度")
+        return False
+
+    save_png(im, out_path)
+    report(name, im, out_path, "svg-mark", final)
     return True
 
 
@@ -260,6 +502,72 @@ def selftest():
     check("小于 180 的被丢弃且不选中", best is not None and best[3] == "https://x/big.png")
     check("超过 2MB 的被丢弃", all(r[3] != "https://x/huge.png" for r in [best]))
 
+    two = Image.new("L", (60, 20), 0)
+    two.paste(255, (0, 0, 10, 20))
+    two.paste(255, (40, 0, 50, 20))
+    check("component_boxes 分出两个不相连的块", len(component_boxes(two)) == 2)
+    check("ink_ratio 对正方形为 1", ink_ratio((0, 0, 10, 10)) == 1)
+    sq = square_box((0, 0, 100, 100), 0.03)
+    check("square_box 留白后仍是正方形",
+          (sq[2] - sq[0]) == (sq[3] - sq[1]) and sq[2] - sq[0] > 100)
+    check("parse_box 收四个数",
+          parse_box("1 2 3 4") == [1.0, 2.0, 3.0, 4.0])
+    check("UA 被拦时有第二个 UA 可换", UA != ALT_UA and 429 in UA_RETRY_STATUS)
+
+    # 横版 logo: 左侧 100×100 方块 + 右侧细竖条(模拟文字), mark 应识别为左边那块
+    logo = Image.new("RGBA", (320, 100), (0, 0, 0, 0))
+    logo.paste((200, 30, 40, 255), (0, 0, 100, 100))
+    for x in range(140, 300, 20):
+        logo.paste((60, 60, 60, 255), (x, 20, x + 6, 80))
+    box = mark_bbox(logo)
+    check("mark_bbox 认出左侧方形 mark",
+          box is not None and abs(box[0]) <= 2 and abs(box[2] - 100) <= 2)
+    check("mark_bbox 不吃右侧文字", box is not None and box[2] <= 105)
+
+    # ® 这类矮附属符号与主干不相连时, 不能算进 mark
+    with_reg = Image.new("RGBA", (320, 100), (0, 0, 0, 0))
+    with_reg.paste((200, 30, 40, 255), (0, 0, 100, 100))
+    with_reg.paste((120, 120, 120, 255), (106, 70, 130, 96))
+    reg_box = mark_bbox(with_reg)
+    check("分离的矮附属符号被排除",
+          reg_box is not None and reg_box[2] <= 105)
+
+    # 附属符号与主干像素相接时无法分离, 至少要退化成不歪的裁框(留给 --mark-box 兜底)
+    welded = Image.new("RGBA", (320, 100), (0, 0, 0, 0))
+    welded.paste((200, 30, 40, 255), (0, 0, 100, 100))
+    welded.paste((120, 120, 120, 255), (100, 70, 130, 100))
+    welded_box = mark_bbox(welded)
+    check("焊接的附属符号不导致报错且裁框近方形",
+          welded_box is not None and ink_ratio(welded_box) <= MARK_RATIO)
+
+    # 粘连场景: 方块与竖条无空隙, 首段过宽时应退化成左侧方窗
+    stuck = Image.new("RGBA", (320, 100), (0, 0, 0, 0))
+    stuck.paste((200, 30, 40, 255), (0, 0, 100, 100))
+    stuck.paste((60, 60, 60, 255), (100, 20, 300, 80))
+    stuck_box = mark_bbox(stuck)
+    check("粘连时退化到左侧方窗",
+          stuck_box is not None and stuck_box[2] - stuck_box[0] <= 110)
+
+    renderer = shutil.which("rsvg-convert")
+    if not renderer:
+        try:
+            import cairosvg  # noqa: F401
+            renderer = "cairosvg"
+        except ImportError:
+            renderer = None
+    if renderer:
+        tiny = (
+            b'<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">'
+            b'<rect width="10" height="10" fill="#c00"/></svg>'
+        )
+        try:
+            im = render_svg(tiny, height=64)
+            check(f"render_svg 可用({renderer})且按高度渲染", im.size[1] == 64)
+        except Exception as exc:
+            check(f"render_svg 渲染内联 SVG ({exc})", False)
+    else:
+        log("  skip render_svg: 没有 rsvg-convert / cairosvg(不算失败)")
+
     if failures:
         log(f"SELFTEST FAILED ({len(failures)}): " + "; ".join(failures))
         return 1
@@ -273,6 +581,10 @@ def main():
     ap.add_argument("site", nargs="?")
     ap.add_argument("--appstore")
     ap.add_argument("--country", default="cn")
+    ap.add_argument("--svg-mark", help="横版 logo 的 SVG(URL 或本地路径), 自动裁出方形 mark")
+    ap.add_argument("--size", type=int, default=1024, help="--svg-mark 的输出边长, 默认 1024")
+    ap.add_argument("--pad", type=float, default=0.03, help="--svg-mark 的裁框留白比例, 默认 0.03")
+    ap.add_argument("--mark-box", help="--svg-mark 手给裁框 x0,y0,x1,y1(像素或 ≤1 的比例)")
     ap.add_argument("--batch")
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--selftest", action="store_true")
@@ -280,12 +592,21 @@ def main():
     args = ap.parse_args()
 
     if args.version:
-        print("fetch_icon.py 1.0.0")
+        print("fetch_icon.py 1.1.0")
         return 0
     if args.selftest:
         return selftest()
     if args.batch and args.name:
         log("--batch 与单个 name 互斥")
+        return 2
+    if args.svg_mark and args.site:
+        log("--svg-mark 与 site 位置参数互斥(只给一个图源)")
+        return 2
+
+    try:
+        box_arg = parse_box(args.mark_box) if args.mark_box else None
+    except ValueError as exc:
+        log(str(exc))
         return 2
 
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -305,6 +626,9 @@ def main():
             if arg.startswith("appstore:"):
                 ok += fetch(root, name, appstore_id=arg.split(":", 1)[1],
                             country=args.country, force=args.force)
+            elif arg.startswith("svg:"):
+                ok += fetch_svg_mark(root, name, arg.split(":", 1)[1], size=args.size,
+                                     pad=args.pad, force=args.force, box_arg=box_arg)
             elif arg:
                 ok += fetch(root, name, site=arg, force=args.force)
             else:
@@ -314,8 +638,12 @@ def main():
 
     if not args.name:
         ap.error("需要 name（或用 --batch / --selftest / --version）")
-    ok = fetch(root, args.name, site=args.site, appstore_id=args.appstore,
-               country=args.country, force=args.force)
+    if args.svg_mark:
+        ok = fetch_svg_mark(root, args.name, args.svg_mark, size=args.size,
+                            pad=args.pad, force=args.force, box_arg=box_arg)
+    else:
+        ok = fetch(root, args.name, site=args.site, appstore_id=args.appstore,
+                   country=args.country, force=args.force)
     return 0 if ok else 1
 
 
