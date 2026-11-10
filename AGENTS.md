@@ -90,6 +90,7 @@ python3 -c "from PIL import Image;i=Image.open('x.png');print(i.size,i.mode,i.fo
 | `deepwiki.com` | 整站套 Vercel 安全检查，所有路径（含 `favicon.ico`）都返回 429 的 `Vercel Security Checkpoint` 页；该页自己的 `<link rel="icon" href="data:,">` 是空值 | 只能走 favicon 服务取 256 版，并用 DuckDuckGo（`icons.duckduckgo.com/ip3/<域>.ico`）交叉验证是同一个图标 |
 | `huggingface.co` | 站点没有 `apple-touch-icon`（404）；首页 `<link>` 里也没有可用图标声明 | 官方品牌库 `huggingface.co/datasets/huggingface/brand-assets/resolve/main/hf-logo.png`（1024，LFS 大文件） |
 | `legado`（阅读） | 原作者仓库 `gedoor/legado` 已清空，`main` 分支只剩一份公告；`mipmap-xxxhdpi` 是最高的 192；`mipmap-anydpi-v26/ic_launcher.xml` 是 adaptive icon，前景层要单独取，拼不回去 | 从社区接手的 `LegadoTeam/legado` 取 `app/src/main/res/mipmap-xxxhdpi/ic_launcher.png`。**不要用 adaptive icon 的前景层**，那是被裁过的不完整图形 |
+| `wkinfo.com.cn`（威科先行） | 官网导航 logo `/static/pic/111.png` 只有 29×28，`favicon.ico` 16×16，`apple-touch-icon` 三条常见路径全返回 HTML 登录页（软 404）；`mcp.wkinfo.com.cn` 整站要 token（401）；全球站 `wolterskluwer.com` 对本机 IP 直返 403。App Store 侧只有同集团的「威科法规库」（id `824228206`），其 512/1024 版是**白底实底 + 盘偏小**，当头像会留一圈白 | 用官方横版 logo 的 SVG `upload.wikimedia.org/wikipedia/en/c/c8/Wolters_Kluwer_logo.svg`，`rsvg-convert -h 2048` 渲染后按九宫格圆盘的 bbox 裁出方形 mark（矢量渲染，非插值）。注意 `upload.wikimedia.org` 对浏览器式 UA 会 429，带自述 UA（如 `KelivoIconBot/1.0`）直连原始文件是 200 |
 
 ## 验收
 
