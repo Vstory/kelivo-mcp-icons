@@ -147,3 +147,19 @@ python3 scripts/fetch_icon.py --version
 stdout 只输出产物（`icons/<name>.png<TAB>尺寸<TAB>字节数`），扫描过程与被跳过的候选走 stderr。
 
 官网没有可用大图时再走 App Store 的 `artworkUrl512`：先查 id（`https://itunes.apple.com/search?term=<名称>&country=cn&entity=software`），再 `--appstore <id>`。
+
+### 横版 logo 取方形 mark（`--svg-mark`）
+
+站点只给横版带字 logo（`.svg`）时，让脚本自己裁出方形 mark：矢量渲染到 2048 高 → 连通块找出「最高、面积最大、最靠左」的那块（文字更矮、`®` 之类附属符号更小）→ 扩成带 3% 留白的正方形 → 缩到 `--size`。全程矢量化，不做插值放大。
+
+```bash
+python3 scripts/fetch_icon.py wkinfo --svg-mark https://example.com/logo.svg
+python3 scripts/fetch_icon.py foo --svg-mark ./logo.svg --size 1024 --pad 0.05
+python3 scripts/fetch_icon.py foo --svg-mark ./logo.svg --mark-box 48,48,2000,2000   # 自动判定不准时手给裁框
+```
+
+- 渲染需要 `rsvg-convert` 或 `cairosvg`（有其一即可；都没有会直接报错，不会悄悄降级成位图放大）。
+- `--mark-box` 收渲染图像素坐标，四个值都 ≤1 时按画布比例解释。
+- 裁出边长不超过 `--size` 时保持原分辨率，不放大；小于 180 直接失败。
+- 附属符号与 mark 像素**相接**时无法分离，脚本会退化成左侧方窗，这种情况用 `--mark-box` 收尾。
+- `--batch` 里一行写成 `name<TAB>svg:<url>` 同样走这条路。
