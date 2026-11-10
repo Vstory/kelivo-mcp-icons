@@ -32,6 +32,7 @@ https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/dropbox.png
 https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/discord.png
 https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/google-maps.png
 https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/google-developer-knowledge.png
+https://raw.githubusercontent.com/Vstory/kelivo-mcp-icons/main/icons/wkinfo.png
 ```
 
 raw 走不通时换 jsDelivr（同一份文件，CDN 加速）：
@@ -58,6 +59,7 @@ https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/dropbox.png
 https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/discord.png
 https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/google-maps.png
 https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/google-developer-knowledge.png
+https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/wkinfo.png
 ```
 
 ## 图标
@@ -81,6 +83,7 @@ https://cdn.jsdelivr.net/gh/Vstory/kelivo-mcp-icons@main/icons/google-developer-
 | `icons/discord.png` | Discord | 256×256 | 官网 `apple-touch-icon` 指向的 ico（`cdn.prod.website-files.com`），转 PNG |
 | `icons/google-maps.png` | Google Maps | 512×512 | PWA manifest 的 `logo_maps_2025_color_1x_web_512dp.png`；manifest 自带的 round 版会带白圈，改用方形版 |
 | `icons/google-developer-knowledge.png` | Google Developer Knowledge | 180×180 | `developers.google.com` 的 `touchicon-180-new.png` |
+| `icons/wkinfo.png` | 威科先行 | 1024×1024 | 官方横版 logo `upload.wikimedia.org/wikipedia/en/c/c8/Wolters_Kluwer_logo.svg` 里的方形九宫格 mark，按矢量渲染到 1024（官网 logo 只有 29×28、`favicon.ico` 16×16，App Store 512 版是白底实底） |
 | `icons/legado.png` | Legado（阅读） | 192×192 | `LegadoTeam/legado` 的 `app/src/main/res/mipmap-xxxhdpi/ic_launcher.png`（Android 最高密度；原作者仓库 gedoor/legado 已清空，只剩公告） |
 | `icons/github.png` | GitHub | 512×512 | `https://github.com/fluidicon.png`（站点 `rel="fluid-icon"`，深色圆盘 + 白猫，圆外透明） |
 
